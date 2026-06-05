@@ -12,7 +12,7 @@ bot = commands.Bot(
     intents=discord.Intents.default(),
     # 2. ユーザーインストール対応
     default_command_integration_types={
-        discord.IntegrationType.user_install,
+     discord.AppIntegrationType.user_install,
     },
 )
 

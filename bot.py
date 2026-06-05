@@ -2,21 +2,26 @@ import asyncio
 import discord
 from discord.ext import commands
 import os
+from dotenv import load_dotenv
 
-# 1. 設定項目（ここを書き換えるだけで自由に変更可能）
-DEFAULT_MESSAGE = "@everyone らて王国 top join now!!! お前ら対策ちゃんとしろよーw　雑魚鯖gg　強くなるためにらて王国に入ろう！https://discord.gg/2533XDQC3s"
-DEFAULT_IMAGE = "image.png"
-SPAM_COUNT = 10
+# 環境変数の読み込み
+load_dotenv()
 
+# インテント（権限）の定義
+intents = discord.Intents.default()
+intents.message_content = True
+
+# ボットの設定
 bot = commands.Bot(
-    intents=discord.Intents.default(),
-    # 2. ユーザーインストール対応
+    intents=intents,
+    command_prefix="!",
+    # ユーザーインストール対応（指定された設定）
     default_command_integration_types={
-discord.AppInstallationType.user,
+        discord.AppInstallationType.user: True,
     },
 )
 
-# 3. 自分専用の操作ボタン
+# スパム操作用のビュー（ボタン）
 class PrivateSpamView(discord.ui.View):
     def __init__(self, user_id):
         super().__init__(timeout=60)
@@ -29,37 +34,39 @@ class PrivateSpamView(discord.ui.View):
         return True
 
     @discord.ui.button(label="スパム開始", style=discord.ButtonStyle.danger)
-    async def start_spam(self, button: discord.ui.Button, interaction: discord.Interaction):
+    async def start_spam(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message("スパムを開始します...", ephemeral=True)
-        for i in range(SPAM_COUNT):
+        message = "@everyone らて王国 top join now!!! https://discord.gg/2533XDQC3s"
+        
+        for i in range(10):
             try:
-                # 画像の有無を確認して送信
-                if os.path.exists(DEFAULT_IMAGE):
-                    await interaction.followup.send(DEFAULT_MESSAGE, file=discord.File(DEFAULT_IMAGE))
+                if os.path.exists("image.png"):
+                    await interaction.followup.send(message, file=discord.File("image.png"))
                 else:
-                    await interaction.followup.send(DEFAULT_MESSAGE)
+                    await interaction.followup.send(message)
             except discord.HTTPException:
                 pass
             await asyncio.sleep(0.5)
 
 @bot.event
 async def on_ready():
-    # 4. コマンドの自動同期
-    await bot.sync_commands()
-    print(f"ログイン成功: {bot.user}")
+    # コマンドの同期
+    try:
+        await bot.tree.sync()
+        print(f"ログイン成功: {bot.user} | 同期完了。")
+    except Exception as e:
+        print(f"同期エラー: {e}")
 
-# 5. /spam コマンド (反応確認用テスト機能付き)
-@bot.slash_command(name="spam", description="自分専用のスパム操作パネルを表示")
-async def spam(ctx: discord.ApplicationContext):
-    # 自分にしか見えないボタンを生成
-    view = PrivateSpamView(user_id=ctx.author.id)
-    await ctx.respond("以下のボタンでスパムを実行できます。（このメッセージはあなたにしか見えません）", view=view, ephemeral=True)
+# スラッシュコマンド：スパムパネルの表示
+@bot.tree.command(name="spam", description="スパム操作パネルを表示")
+async def spam(interaction: discord.Interaction):
+    view = PrivateSpamView(user_id=interaction.user.id)
+    await interaction.response.send_message("以下のボタンで操作してください:", view=view, ephemeral=True)
 
-# 動作確認用テストコマンド (このサーバーでボットが正常に動くか確認できます)
-@bot.slash_command(name="test", description="ボットが正常に動いているか確認")
-async def test(ctx: discord.ApplicationContext):
-    await ctx.respond(f"ボットは正常に稼働中です！実行者: {ctx.author.name}", ephemeral=True)
+# スラッシュコマンド：動作確認
+@bot.tree.command(name="test", description="ボットの状態確認")
+async def test(interaction: discord.Interaction):
+    await interaction.response.send_message("ボットは正常に稼働中です。", ephemeral=True)
 
-from dotenv import load_dotenv
-load_dotenv()
+# ボットの起動（Renderの環境変数TOKENを読み込み）
 bot.run(os.environ.get('TOKEN'))

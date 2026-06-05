@@ -9,13 +9,13 @@ from threading import Thread
 # 環境変数の読み込み
 load_dotenv()
 
-# --- Render タイムアウト対策用サーバー ---
+# --- 1. Render用：Webサーバー機能 (タイムアウト対策) ---
 app = Flask(__name__)
 @app.route('/')
 def home(): return "Bot is running!"
 def run_web(): app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
 Thread(target=run_web, daemon=True).start()
-# ----------------------------------------
+# ----------------------------------------------------
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -49,13 +49,14 @@ class PrivateSpamView(discord.ui.View):
                 else:
                     await interaction.followup.send(message)
                 
-                # 安全のための待機
+                # 送信後の安全な待機時間
                 await asyncio.sleep(2.0)
                 
             except discord.HTTPException as e:
-                # レートリミット（429）を自動検知して待機する処理
+                # --- 2. レートリミット対策：Discordの制限を自動で守る ---
                 if e.status == 429:
-                    retry_after = e.retry_after or 5.0
+                    # ヘッダーから再試行可能時間を取得して待機
+                    retry_after = float(e.response.headers.get("Retry-After", 5.0))
                     print(f"制限検知: {retry_after}秒待機します")
                     await asyncio.sleep(retry_after)
                     continue

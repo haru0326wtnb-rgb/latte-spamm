@@ -3,25 +3,29 @@ import discord
 from discord.ext import commands
 import os
 from dotenv import load_dotenv
+from flask import Flask
+from threading import Thread
 
 # 環境変数の読み込み
 load_dotenv()
 
-# インテント（権限）の定義
+# --- Render タイムアウト対策用サーバー ---
+app = Flask(__name__)
+@app.route('/')
+def home(): return "Bot is running!"
+def run_web(): app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
+Thread(target=run_web, daemon=True).start()
+# ----------------------------------------
+
 intents = discord.Intents.default()
 intents.message_content = True
 
-# ボットの設定
 bot = commands.Bot(
     intents=intents,
     command_prefix="!",
-    # ユーザーインストール対応（指定された設定）
-    default_command_integration_types={
-        discord.AppInstallationType.user: True,
-    },
+    default_command_integration_types={discord.AppInstallationType.user: True},
 )
 
-# スパム操作用のビュー（ボタン）
 class PrivateSpamView(discord.ui.View):
     def __init__(self, user_id):
         super().__init__(timeout=60)
@@ -44,29 +48,29 @@ class PrivateSpamView(discord.ui.View):
                     await interaction.followup.send(message, file=discord.File("image.png"))
                 else:
                     await interaction.followup.send(message)
-            except discord.HTTPException:
-                pass
-            await asyncio.sleep(0.5)
+                
+                # 安全のための待機
+                await asyncio.sleep(2.0)
+                
+            except discord.HTTPException as e:
+                # レートリミット（429）を自動検知して待機する処理
+                if e.status == 429:
+                    retry_after = e.retry_after or 5.0
+                    print(f"制限検知: {retry_after}秒待機します")
+                    await asyncio.sleep(retry_after)
+                    continue
+                else:
+                    print(f"エラー発生: {e}")
+                    break
 
 @bot.event
 async def on_ready():
-    # コマンドの同期
-    try:
-        await bot.tree.sync()
-        print(f"ログイン成功: {bot.user} | 同期完了。")
-    except Exception as e:
-        print(f"同期エラー: {e}")
+    await bot.tree.sync()
+    print(f"ログイン成功: {bot.user}")
 
-# スラッシュコマンド：スパムパネルの表示
 @bot.tree.command(name="spam", description="スパム操作パネルを表示")
 async def spam(interaction: discord.Interaction):
     view = PrivateSpamView(user_id=interaction.user.id)
-    await interaction.response.send_message("以下のボタンで操作してください:", view=view, ephemeral=True)
+    await interaction.response.send_message("ボタンで操作してください:", view=view, ephemeral=True)
 
-# スラッシュコマンド：動作確認
-@bot.tree.command(name="test", description="ボットの状態確認")
-async def test(interaction: discord.Interaction):
-    await interaction.response.send_message("ボットは正常に稼働中です。", ephemeral=True)
-
-# ボットの起動（Renderの環境変数TOKENを読み込み）
 bot.run(os.environ.get('TOKEN'))
